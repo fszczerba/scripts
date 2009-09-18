@@ -2,8 +2,21 @@
 #
 # iPhone packaging script
 #
+# ============================================================================
+# Version 1.1
+# July 14, 2009
+#
+# - support shared source repositories
+# - build all targets in the project correctly
+# - leave iTunes Artwork beside distribution bundles, not inside
+# - better handling for targets with spaces in their names
+#
+# ------------
+#
 # Version 1.0
 # May 24, 2009
+#
+# ============================================================================
 #
 # Copyright 2009, Frank Szczerba <frank@szczerba.net>
 # All rights reserved.
@@ -61,8 +74,14 @@ usage() {
 #
 # Default options
 #
+project="$(basename $(pwd))"
 nocommit=0
 configs=
+buildbase=build
+
+# source repos shared across multiple projects, these must be clean and get
+# tagged with everything else
+sharedsources=../AppMobiUtils
 
 # all known configurations
 xcodeconfigs=$(xcodebuild -list | sed '
@@ -71,6 +90,15 @@ xcodeconfigs=$(xcodebuild -list | sed '
 		/^[[:space:]]*$/				d
 		s/[[:space:]]*\([^[:space:]]*\).*/\1/
 	')
+
+xcodetargets="$(xcodebuild -list | sed '
+		/Targets:/,/^[[:space:]]*$/			!d
+		/Targets/					d
+		/^[[:space:]]*$/				d
+		s/^[[:space:]]*//
+		s/(.*)//
+		s/[[:space:]]*$//
+	')"
 
 if [ -z "$xcodeconfigs" ] ; then
 	# no project bundle?
@@ -99,24 +127,25 @@ if [ -z "$configs" ] ; then
 fi
 
 # check for modified files, bail if found
-if ! git status | grep -q 'nothing to commit (working directory clean)' ; then
-	if [ "$nocommit" -eq "0" ] ; then
-		# if committing the directory must be clean at first
-		git status
-		die "directory is dirty"
-	else
-		# development build, just remember that it was dirty
-		isdirty=1
-	fi
-else
-	isdirty=0
-fi
+isdirty=0
 
+for d in . $sharedsources ; do
+	if ! (cd $d ; git status) | grep -q 'nothing to commit (working directory clean)' ; then
+		if [ "$nocommit" -eq "0" ] ; then
+			# if committing the directory must be clean at first
+			git status
+			die "directory \"$d\" is dirty"
+		else
+			# development build, just remember that it was dirty
+			isdirty=1
+		fi
+	fi
+done
 
 if [ "$nocommit" -eq "0" ] ; then
 	# read out the marketing version
 	# do this separate from the cut so we can check the exit code
-	mvers=$(agvtool mvers -terse)
+	mvers=$(agvtool mvers -terse | head -1)
 	if [ $? -ne 0 -o -z "$mvers" ] ; then
 		die "No marketing version found"
 	fi
@@ -141,6 +170,10 @@ if [ "$nocommit" -eq "0" ] ; then
 	echo "Committing "$fullvers" with tag $tag"
 	git ci -a -m "Set build version '$fullvers'" -n || die 'commit failed'
 	git tag "$tag" -m "$fullvers"
+	libtag=$(echo "$project-$tag" | tr ' ' _)
+	for d in $sharedsources ; do
+		(cd $d ; git tag $libtag -m "$project $tag")
+	done
 else
 	# not committing, use the SHA1 as the version
 	fullvers=$(git rev-parse HEAD 2>/dev/null)
@@ -151,14 +184,14 @@ else
 	fi
 fi
 
-# clean up old builds so that everything is built from scratch
-rm -rf build
+# clean up old builds
 rm -rf Payload
-all=
+logname=$(mktemp /tmp/build.temp.XXXXXX)
+printf "Created:" > $logname
 
 # build and package each requested config
 for config in $configs ; do
-	xcodebuild -alltargets -parallelizeTargets -configuration $config build || die "Build failed"
+	xcodebuild -alltargets -parallelizeTargets -configuration $config clean build || die "Build failed"
 
 	# packaged output goes in Releases if tagged, Development otherwise
 	if [ "$nocommit" -eq "0" ] ; then
@@ -170,8 +203,8 @@ for config in $configs ; do
 	mkdir -p "$releasedir"
 
 	# Package each app
-	for app in build/$config-iphoneos/*.app ; do
-		basename="$(basename "$app" .app)"
+	echo "$xcodetargets" | while read basename ; do
+		app="$buildbase/$config-iphoneos/$basename.app"
 
 		mkdir -p Payload/Payload
 		cp -Rp "$app" Payload/Payload
@@ -179,16 +212,22 @@ for config in $configs ; do
 		# Get app-specific iTunes artwork or project-specific artwork
 		# if available
 		if [ -f "$basename".iTunesArtwork ] ; then
-			cp -f "$basename".iTunesArtwork Payload/iTunesArtwork
+			artwork="$basename".iTunesArtwork
 		elif [ -f iTunesArtwork ] ; then
-			cp -f iTunesArtwork Payload/iTunesArtwork
+			artwork=iTunesArtwork
+		else
+			artwork=
 		fi
 
 		# Distribution builds have a .zip extension, development
 		# builds have a .ipa extension
-		if [ "$config" -eq "Distribute" ] ; then
+		if [ "$config" = "Distribute" -o "$config" = "Distribution" ] ; then
+			output="$releasedir/$basename.iTunesArtwork"
+			cp -f "$artwork" "$output"
+			printf "\t$output\n" >> $logname
 			ext=zip
 		else
+			[ -n "$artwork" ] && cp -f "$artwork" Payload/iTunesArtwork
 			ext=ipa
 		fi
 
@@ -198,18 +237,20 @@ for config in $configs ; do
 		rm -rf Payload
 
 		# add to the list of output files
-		all="${all:+$(printf "%s\n" "$all")}$(printf "\t%s" "$output")"
+		printf "\t$output\n" >> $logname
 
 		# save debug symbols (if available) with the app
 		if [ -d "$app.dSYM" ] ; then
 			output="$releasedir/$basename.dSYM.zip"
 			ditto -c -k "$app.dSYM" "$output" || die "Failed to compress debug info"
-			all="$(printf "%s\n" "$all")$(printf "\t%s" "$output")"
+			printf "\t$output\n" >> $logname
 		fi
 		# update a symlink to the latest version
-		(cd $basedir/$config ; ln -sf "$fullvers/$basename.$ext")
+		(cd "$basedir/$config" ; ln -sf "$fullvers/$basename.$ext")
 	done
 done
 
 # report the generated files
-printf "Created: $all\n"
+printf "\n" >> $logname
+cat $logname
+rm $logname
