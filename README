@@ -1,0 +1,16 @@
+This is a collection of scripts I've built up over the years. This is just the
+beginning, there's much more to come.
+
+All files in this repository are released under the BSD license. I'd appreciate
+an email to let me know that you find something in here useful, and an
+attribution in any released project, but it's not required. Just don't take my
+work and claim it as your own.
+
+You can contact me at frank@szczerba.net, my blog is http://carpe-cocoa.com.
+
+---
+
+iPhone/build.sh: xcode build script for iPhone apps
+
+trim_line_ends.sh: trim whitespace from C, C++, Objective C, and Objective C++
+    source file line ends (prior to committing to git).
