@@ -15,7 +15,7 @@
 #
 # Version 1.0
 # May 24, 2009
-#
+# 
 # ============================================================================
 #
 # Copyright 2009, Frank Szczerba <frank@szczerba.net>
@@ -60,7 +60,7 @@ usage() {
 		printf "\n"
 	fi
 	echo "usage: build [-n] [config...]" >&2
-	echo "    -n : do not update build number or commit to git" >&2
+	echo "    -n : do not update build number or commit to git/svn" >&2
 	if [ -n "$xcodeconfigs" ] ; then
 		printf "\n    Known configs:" >&2
 		printf " %s" $xcodeconfigs >&2
@@ -70,6 +70,54 @@ usage() {
 	fi
 	exit 3
 }
+
+svn_status() {
+	svn status
+}
+
+svn_dirtycheck() {
+	(cd "$1"; svn status) | egrep -qv '^X|Performing status|^$'
+}
+
+svn_commit() {
+	svn commit -m "$1"
+}
+
+svn_tag() {
+	echo "Tagging not supported for SVN"
+}
+
+svn_fullvers() {
+	svn info | grep Revision | awk '{print "SVN"$2}'
+}
+
+git_status() {
+	git status
+}
+
+git_dirtycheck() {
+	! (cd "$1" ; git status) | grep -q 'nothing to commit (working directory clean)'
+}
+
+git_commit() {
+	
+	git ci -a -n -m "$1"
+	
+}
+
+git_tag() {
+	git tag "$1" -m "$2"
+}
+
+git_fullvers() {
+	git rev-parse HEAD 2>/dev/null
+}
+
+if [ -d '.svn' ]; then
+	VCPREFIX=svn
+else
+	VCPREFIX=git
+fi
 
 #
 # Default options
@@ -81,15 +129,16 @@ buildbase=build
 
 # source repos shared across multiple projects, these must be clean and get
 # tagged with everything else
-sharedsources=../AppMobiUtils
+sharedsources=
 
 # all known configurations
 xcodeconfigs=$(xcodebuild -list | sed '
 		/Build Configurations:/,/^[[:space:]]*$/	!d
 		/Build Configurations/				d
 		/^[[:space:]]*$/				d
-		s/[[:space:]]*\([^[:space:]]*\).*/\1/
-	')
+		s/[[:space:]]*\([^[:space:]].*\).*/\1/
+		s/[[:space:]][(]Active[)]$//
+	'| perl -e '$a="";while(<>){$a.=$_;} $a=~s/\n/:/mg; print $a;')
 
 xcodetargets="$(xcodebuild -list | sed '
 		/Targets:/,/^[[:space:]]*$/			!d
@@ -113,7 +162,12 @@ while [ -n "$*" ]; do
 		-n) nocommit=1 ; shift ;;
 		-*) usage ;;
 		*)	if echo $xcodeconfigs | grep -wq "$1" ; then
-				configs="$configs $1"; shift 
+				if [ -z "$configs" ]; then
+					configs="$1"
+				else
+					configs="${configs}:$1";
+				fi
+				shift 
 			else
 				usage "Invalid config '$1'"
 			fi
@@ -126,14 +180,16 @@ if [ -z "$configs" ] ; then
 	configs=$xcodeconfigs
 fi
 
+echo "$configs"
+
 # check for modified files, bail if found
 isdirty=0
 
 for d in . $sharedsources ; do
-	if ! (cd $d ; git status) | grep -q 'nothing to commit (working directory clean)' ; then
+	if ${VCPREFIX}_dirtycheck ; then
 		if [ "$nocommit" -eq "0" ] ; then
 			# if committing the directory must be clean at first
-			git status
+			${VCPREFIX}_status
 			die "directory \"$d\" is dirty"
 		else
 			# development build, just remember that it was dirty
@@ -168,30 +224,35 @@ if [ "$nocommit" -eq "0" ] ; then
 
 	# commit the changed version and tag it
 	echo "Committing "$fullvers" with tag $tag"
-	git ci -a -m "Set build version '$fullvers'" -n || die 'commit failed'
-	git tag "$tag" -m "$fullvers"
+	${VCPREFIX}_commit "Set build version '$fullvers'" || die 'commit failed'
+	${VCPREFIX}_tag "$tag" "$fullvers"
 	libtag=$(echo "$project-$tag" | tr ' ' _)
 	for d in $sharedsources ; do
-		(cd $d ; git tag $libtag -m "$project $tag")
+		(cd $d ; {VCPREFIX}_tag $libtag "$project $tag")
 	done
 else
 	# not committing, use the SHA1 as the version
-	fullvers=$(git rev-parse HEAD 2>/dev/null)
-
+	TAGFUNCTION="${VCPREFIX}_fullvers"
+	fullvers=`$TAGFUNCTION`
+	
 	# if it's dirty, append the date, time, and timezone
 	if [ "$isdirty" -ne 0 ] ; then
 		fullvers="$fullvers+ $(date +%F\ %T\ %Z)"
 	fi
 fi
 
-# clean up old builds
+# clean up old builds 
 rm -rf Payload
 logname=$(mktemp /tmp/build.temp.XXXXXX)
 printf "Created:" > $logname
 
 # build and package each requested config
+SAVEIFS=$IFS
+IFS=$':'
 for config in $configs ; do
-	xcodebuild -alltargets -parallelizeTargets -configuration $config clean build || die "Build failed"
+	config=`echo $config | sed 's/^[[:space:]]//'`
+	
+	echo "CONFIG=$config"
 
 	# packaged output goes in Releases if tagged, Development otherwise
 	if [ "$nocommit" -eq "0" ] ; then
@@ -199,12 +260,13 @@ for config in $configs ; do
 	else
 		basedir=Development
 	fi
-	releasedir=$basedir/$config/"$fullvers"
+	releasedir="$basedir/$config/$fullvers"
 	mkdir -p "$releasedir"
+
+	(xcodebuild -alltargets -parallelizeTargets -configuration "$config" clean build | tee "$basedir/xcodebuild.log") || die "Build failed"
 
 	# Package each app
 	echo "$xcodetargets" | while read basename ; do
-		[ "$basename" = All ] && continue
 		app="$buildbase/$config-iphoneos/$basename.app"
 
 		mkdir -p Payload/Payload
@@ -223,7 +285,7 @@ for config in $configs ; do
 		# Distribution builds have a .zip extension, development
 		# builds have a .ipa extension
 		if [ "$config" = "Distribute" -o "$config" = "Distribution" ] ; then
-			output="$releasedir/$basename.iTunesArtwork"
+			output="$releasedir/$basename.iTunesArtwork" 
 			cp -f "$artwork" "$output"
 			printf "\t$output\n" >> $logname
 			ext=zip
@@ -248,8 +310,20 @@ for config in $configs ; do
 		fi
 		# update a symlink to the latest version
 		(cd "$basedir/$config" ; ln -sf "$fullvers/$basename.$ext")
+		
+		# Identify the provisioning profile used for this app
+		provisioning_file=`cat $basedir/xcodebuild.log | grep ProcessProductPackaging | grep "Provisioning Profiles" | grep "$basename.app" | sed 's/^.*\/\([A-F0-9-]\{36\}\).*/\1/'`
+		cp "$HOME/Library/MobileDevice/Provisioning Profiles/${provisioning_file}.mobileprovision" "$releasedir/${provisioning_file}.mobileprovision"
+		
+		#update a symlink to the latest provisioning profile
+		(cd "$basedir/$config" ; ln -sf "$fullvers/${provisioning_file}.mobileprovision")
+		
 	done
+	
+	rm "$basedir/xcodebuild.log"
+	
 done
+IFS=$SAVEIFS
 
 # report the generated files
 printf "\n" >> $logname
