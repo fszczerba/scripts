@@ -204,6 +204,7 @@ for config in $configs ; do
 
 	# Package each app
 	echo "$xcodetargets" | while read basename ; do
+		[ "$basename" = All ] && continue
 		app="$buildbase/$config-iphoneos/$basename.app"
 
 		mkdir -p Payload/Payload
