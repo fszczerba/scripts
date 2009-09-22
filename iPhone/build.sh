@@ -15,7 +15,7 @@
 #
 # Version 1.0
 # May 24, 2009
-# 
+#
 # ============================================================================
 #
 # Copyright 2009, Frank Szczerba <frank@szczerba.net>
@@ -88,7 +88,7 @@ svn_tag() {
 }
 
 svn_fullvers() {
-	svn info | grep Revision | awk '{print "SVN"$2}'
+	svn info | egrep "^Revision:" | awk '{print "SVN"$2}'
 }
 
 git_status() {
@@ -228,7 +228,7 @@ if [ "$nocommit" -eq "0" ] ; then
 	${VCPREFIX}_tag "$tag" "$fullvers"
 	libtag=$(echo "$project-$tag" | tr ' ' _)
 	for d in $sharedsources ; do
-		(cd $d ; {VCPREFIX}_tag $libtag "$project $tag")
+		(cd $d ; ${VCPREFIX}_tag $libtag "$project $tag")
 	done
 else
 	# not committing, use the SHA1 as the version
@@ -241,7 +241,7 @@ else
 	fi
 fi
 
-# clean up old builds 
+# clean up old builds
 rm -rf Payload
 logname=$(mktemp /tmp/build.temp.XXXXXX)
 printf "Created:" > $logname
@@ -285,7 +285,7 @@ for config in $configs ; do
 		# Distribution builds have a .zip extension, development
 		# builds have a .ipa extension
 		if [ "$config" = "Distribute" -o "$config" = "Distribution" ] ; then
-			output="$releasedir/$basename.iTunesArtwork" 
+			output="$releasedir/$basename.iTunesArtwork"
 			cp -f "$artwork" "$output"
 			printf "\t$output\n" >> $logname
 			ext=zip
