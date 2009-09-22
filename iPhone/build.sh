@@ -101,7 +101,7 @@ git_dirtycheck() {
 
 git_commit() {
 	
-	git ci -a -n -m "$1"
+	git commit -a -n -m "$1"
 	
 }
 
