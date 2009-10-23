@@ -284,7 +284,7 @@ for config in $configs ; do
 
 		# Distribution builds have a .zip extension, development
 		# builds have a .ipa extension
-		if [ "$config" = "Distribute" -o "$config" = "Distribution" ] ; then
+		if [ "$config" = "Distribute" -o "$config" = "Distribution" -o "$config" = "App Store" ] ; then
 			output="$releasedir/$basename.iTunesArtwork"
 			cp -f "$artwork" "$output"
 			printf "\t$output\n" >> $logname
