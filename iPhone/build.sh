@@ -305,7 +305,7 @@ for config in $configs ; do
 		# save debug symbols (if available) with the app
 		if [ -d "$app.dSYM" ] ; then
 			output="$releasedir/$basename.dSYM.zip"
-			ditto -c -k "$app.dSYM" "$output" || die "Failed to compress debug info"
+			ditto -c -k --keepParent "$app.dSYM" "$output" || die "Failed to compress debug info"
 			printf "\t$output\n" >> $logname
 		fi
 		# update a symlink to the latest version
