@@ -1,0 +1,132 @@
+#! /usr/bin/env perl
+# ============================================================================
+#
+# Copyright 2012, Frank Szczerba <frank@szczerba.net>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    * Redistributions of source code must retain the above copyright notice,
+#      this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#    * Neither the name of the copyright holder nor the names of any
+#      contributors may be used to endorse or promote products derived from
+#      this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+
+use strict;
+use warnings;
+use Getopt::Long;
+use Pod::Usage;
+use List::Util qw(max);
+
+sub header {
+    my $flag  = shift;
+    my @lines = @_;
+    chomp @lines;
+    @lines = map { split /\n/ } @lines;
+    $flag = $flag x max( map length, @lines );
+    return join( "\n", $flag, @lines, $flag, '' );
+}
+
+#
+# main
+#
+my $man  = 0;
+
+GetOptions(
+    'h' => sub { pod2usage(-exitstatus => 0, -verbose => 0); },
+    'help' => sub { pod2usage(-exitstatus => 0, -verbose => 1); },
+    'man' => sub { pod2usage(-exitstatus => 0, -verbose => 2) },
+    'flag|f=s' => \$flag
+) or pod2usage(0);
+
+$flag =~ s/^(.).*/$1/;
+
+if (@ARGV) {
+    print header $flag, @ARGV;
+}
+else {
+    print header $flag, <>;
+}
+
+__END__
+
+=head1 NAME
+
+header - print a message as a header
+
+=head1 SYNOPSIS
+
+header [options] [--] [message ...]
+
+Options:
+  --help            brief help message
+  --man             full documentation
+  --flag c          set flag character
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+
+Print a brief help message and exits.
+
+=item B<--man>
+
+Prints the manual page and exits.
+
+=item B<--flag c>
+
+Sets B<c> as the flag character instead of the hash charcter '#'.
+
+=back
+
+=head1 DESCRIPTION
+
+This program will echo B<message> (or standard input if no B<message> is given)
+to standard output, with a series of flag characters added above and below.
+
+=head1 EXAMPLE
+
+        $ header This is a test
+        ##############
+        This is a test
+        ##############
+        $ ls -1 | header
+        ##################
+        README
+        header*
+        gitdiff*
+        gitrmall*
+        iPhone/
+        trim_line_ends.sh*
+        ##################
+        $ ls -1 | header -f -
+        ------------------
+        README
+        header*
+        gitdiff*
+        gitrmall*
+        iPhone/
+        trim_line_ends.sh*
+        ------------------
+
+=cut
+

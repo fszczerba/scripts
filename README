@@ -12,9 +12,11 @@ You can contact me at frank@szczerba.net, my blog is http://carpe-cocoa.com.
 
 iPhone/build.sh: xcode build script for iPhone apps
 
-trim_line_ends.sh: trim whitespace from C, C++, Objective C, and Objective C++
-    source file line ends (prior to committing to git).
-
 gitdiff : use vim to show changes in a git repository. Use -g for gvim.
 
 gitrmall : delete all files git isn't tracking or ignoring
+
+header : print a message as a header
+
+trim_line_ends.sh: trim whitespace from C, C++, Objective C, and Objective C++
+    source file line ends (prior to committing to git).
