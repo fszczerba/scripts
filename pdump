@@ -1,0 +1,121 @@
+#! /usr/bin/env perl
+# ============================================================================
+#
+# Copyright 2012, Frank Szczerba <frank@szczerba.net>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#    * Redistributions of source code must retain the above copyright notice,
+#      this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#    * Neither the name of the copyright holder nor the names of any
+#      contributors may be used to endorse or promote products derived from
+#      this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+
+use strict;
+use warnings;
+use Data::Dumper;
+use Getopt::Long qw(:config gnu_getopt);
+use Pod::Usage;
+
+my @modules;
+
+GetOptions(
+    'h'    => sub { pod2usage( -exitstatus => 0, -verbose => 0 ); },
+    'help' => sub { pod2usage( -exitstatus => 0, -verbose => 1 ); },
+    'man'  => sub { pod2usage( -exitstatus => 0, -verbose => 2 ) },
+    'M=s'  => \@modules,
+    'I=s'  => \@INC,
+) || pod2usage(0);
+
+@ARGV or pod2usage("Must have one or more name/expr pairs");
+
+foreach my $moduledef (@modules) {
+    my ( $module, $imports ) = split /=/, $moduledef;
+
+    if ($imports) {
+        $imports =~ s/,/ /g;
+        print "Import qw/$imports/ from $module\n";
+        eval "use $module qw/$imports/;";
+    }
+    else {
+        print "Import $module\n";
+        eval "use $module;";
+    }
+    die if $@;
+}
+
+my $i = 1;
+while (@ARGV) {
+    my $expr = shift @ARGV;
+    my $val  = eval "return $expr";
+    if ($@) {
+        warn "expr$i died: $@\n";
+    }
+    else {
+        print Data::Dumper->Dump( [$val], ["expr$i"] ), "\n";
+    }
+    $i++;
+}
+
+__END__
+
+=head1 NAME
+
+pdump - perl data dumper
+
+=head1 SYNOPSIS
+
+    pdump [-h|--help|--man] [-Idir] [-Mmod[=imports]] expr [expr...]
+
+Prints one or more perl expressions through the Data::Dumper module.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-h> or B<-?>
+
+Show basic usage.
+
+=item B<--help>
+
+Show detailed usage.
+
+=item B<--man>
+
+Show full documentation.
+
+=item B<-Idir>
+
+Add I<dir> to B<@INC>.
+
+=item B<-Mmod>
+
+Import module I<mod>.
+
+=item B<-Mmod=imports>
+
+Import I<imports> from module I<mod>.
+
+=back
+
+=cut
+

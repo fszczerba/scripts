@@ -18,5 +18,7 @@ gitrmall : delete all files git isn't tracking or ignoring
 
 header : print a message as a header
 
+pdump : print one or more perl expressions
+
 trim_line_ends.sh: trim whitespace from C, C++, Objective C, and Objective C++
     source file line ends (prior to committing to git).
